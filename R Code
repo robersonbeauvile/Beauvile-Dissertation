@@ -1,0 +1,272 @@
+library(aod)
+library(ggplot2)
+library(foreign)
+
+#load data
+data <- read.dbf("C:/Users/rober/OneDrive/Papers/Manuscripts/Strong Ties and Migration Inclination/Data/Network Lab/PSID_Data9.dbf")
+
+#Creating variables for analysis
+fut_move <- data$ER66162
+moved_ever <- data$ER70878
+good_friends <- data$WB16A4H
+sati_w_friends <- data$WB16A5H
+more_friends <- data$WB16G4
+income <- data$ER71426
+income[income < 0] <- NA
+log_income <- log(income)
+move_prior2years <- data$ER66158
+moved_prior3years <- data$ER66156
+relation_ref <- data$ER34503
+edu <- data$ER34548
+male <- data$ER32000
+latino <- data$ER64809
+white <- data$ER64810
+black <- data$ER64810
+income05 <- income
+income25 <- income
+income50 <- income
+income75 <- income
+income95 <- income
+metro <- data$ER65452
+age <- data$ER34305
+age2 <- age*age
+employ <- data$ER34317
+own <- data$ER60030
+wmove <- data$ER66159
+wmovef <- data$ER66159
+tie_index <- data$WB16C8A + data$WB16C10A + data$WB16C10B + data$WB16C10C +
+  data$WB16C13E
+
+
+#Summarizing data (uncleaned)
+table(tie_index, useNA = "always")
+summary(tie_index)
+table(fut_move, useNA = "always")
+table(moved_ever, useNA = "always")
+table(good_friends, useNA = "always")
+table(sati_w_friends, useNA = "always")
+table(more_friends, useNA = "always")
+summary(log_income)
+table(move_prior2years, useNA = "always")
+table(moved_prior3years, useNA = "always")
+table(relation_ref, useNA = "always")
+table(edu, useNA = "always")
+summary(edu)
+table(male, useNA = "always")
+table(latino, useNA = "always")
+table(white, useNA = "always")
+table(metro, useNA = "always")
+table(age, useNA = "always")
+table(employ, useNA = "always")
+table(own, useNA = "always")
+table(occup, useNA = "always")
+table(wmove, useNA = "always")
+table(black, useNA = "always")
+
+#Checking for collinearity
+vari <- data.frame(tie_index, fut_move, moved_ever, good_friends,
+                   sati_w_friends, more_friends, log_income, move_prior2years,
+                   male, metro, age, age2, own, latino, white, employ, edu,
+                   wmove)
+round(cor(vari, use = "pairwise.complete.obs"), 2)
+
+#Recoding and cleaning data
+fut_move[fut_move == 5] <- 0
+fut_move[fut_move == 9] <- NA
+fut_move[fut_move == 8] <- NA
+moved_ever[moved_ever == 5] <- 0
+moved_ever[moved_ever == 9] <- NA
+good_friends[good_friends == 9] <- NA
+good_friends <- 6 - good_friends
+good_friends <- factor(good_friends,
+                       levels = c(1,2,3,4,5),
+                       labels = c(" Not at all important",
+                                  " A little important",
+                                  " Somewhat important",
+                                  " Very important",
+                                  " Extremely important"))
+sati_w_friends[sati_w_friends > 5] <- NA
+sati_w_friends <- 6 - sati_w_friends
+# sati_w_friends <- factor(sati_w_friends,
+#                          levels = c(1,2,3,4,5),
+#                          labels = c(" Not at all satisfied",
+#                                     " A little satisfied",
+#                                     " Somewhat satisfied",
+#                                     " Very satisfied",
+#                                     " Completely satisfied"))
+wmovef[wmovef == 0] <- NA
+wmovef[wmovef == 98] <- NA
+wmovef[wmovef == 99] <- NA
+wmovef <- factor(wmovef,
+                 levels = c(1,2,3,4,5,6,7,8,9),
+                 labels = c("Purposive productive",
+                            "Closer to work",
+                            "Purposive consumptive",
+                            "Purposive consumptive(contraction of housing)",
+                            "Purposive consumptive(other house related)",
+                            "Purposive consumptive(neighborhood-related)",
+                            "Involuntary",
+                            "Ambiguous",
+                            "Homeless"))
+more_friends[more_friends == 2] <- 0
+more_friends[more_friends == 9] <- NA
+move_prior2years[move_prior2years == 2017 | move_prior2years == 2016] <- 1
+move_prior2years[move_prior2years == 2015] <- 0
+move_prior2years[move_prior2years > 2018] <- NA
+moved_prior3years[moved_prior3years == 5] <- 0
+moved_prior3years[moved_prior3years > 5] <- NA
+edu[edu == 99] <- NA
+male[male == 2] <- 0
+latino[latino == 9] <- NA
+latino[latino > 0 & latino < 9] <- 1
+own[own == 5] <- 0
+own[own == 8] <- NA
+white[white == 9] <- NA
+white[white > 1] <- 0
+black[black == 9] <- NA
+black[black < 2 | black > 2] <- 0
+black[black == 2] <- 1
+employ[employ == 9 | employ == 0] <- NA
+employ[employ != 1] <- 0
+metro[metro == 0] <- NA
+metro[metro == 2] <- 0
+age[age == 999 | age == 0] <- NA
+age = 1 + age
+age2 = age*age
+income05[income05 < 9700] <- 0
+income05[income05 >= 9700] <- 1
+income25[income25 < 32500] <- 0
+income25[income25 >= 32500] <- 1
+income50[income50 < 60300] <- 0
+income50[income50 >= 60300] <- 1
+income75[income75 < 103500] <- 0
+income75[income75 >= 103500] <- 1
+income95[income95 < 212500] <- 0
+income95[income95 >= 212500] <- 1
+blackexc05 = black*income05
+blackexc25 = black*income25
+blackexc50 = black*income50
+blackexc75 = black*income75
+blackexc95 = black*income95
+
+#Summarizing data (cleaned)
+table(tie_index, useNA = "always")
+summary(tie_index)
+hist(tie_index)
+table(fut_move, useNA = "always")
+table(moved_ever, useNA = "always")
+table(good_friends, useNA = "always")
+table(sati_w_friends, useNA = "always")
+table(more_friends, useNA = "always")
+summary(log_income)
+table(move_prior2years, useNA = "always")
+table(moved_prior3years, useNA = "always")
+table(relation_ref, useNA = "always")
+table(edu, useNA = "always")
+summary(edu)
+table(male, useNA = "always")
+table(latino, useNA = "always")
+table(white, useNA = "always")
+table(metro, useNA = "always")
+table(age, useNA = "always")
+table(age2, useNA = "always")
+table(employ, useNA = "always")
+table(own, useNA = "always")
+table(wmovef, useNA = "always")
+table(blackexc, useNA = "always")
+
+#Checking for collinearity
+vari <- data.frame(tie_index, fut_move, moved_ever, sati_w_friends,
+                   more_friends, log_income, move_prior2years, male, metro, age,
+                   age2, own, latino, white, employ, edu, blackexc05, blackexc25,
+                   blackexc50, blackexc75
+                  , blackexc95)
+round(cor(vari, use = "pairwise.complete.obs"), 2)
+###Logistic Regression of movement
+model1 <- glm(move_prior2years ~ tie_index, 
+              family = "binomial")
+model2 <- glm(move_prior2years ~ tie_index + blackexc05 + blackexc05:tie_index
+              , family = "binomial")
+model3 <- glm(move_prior2years ~ tie_index + blackexc95 + blackexc95:tie_index, 
+              family = "binomial")
+model4 <- glm(move_prior2years ~ blackexc05 + male +
+                edu + metro + own + employ + moved_ever 
+              , family = "binomial")
+model5 <- glm(move_prior2years ~ blackexc95 + male +
+              edu + metro + own + employ + moved_ever
+             , family = "binomial")
+
+summary(model1)
+summary(model2)
+summary(model3)
+summary(model4)
+summary(model5)
+exp(coef(model1))
+exp(coef(model2))
+exp(coef(model3))
+exp(coef(model4))
+exp(coef(model5))
+
+#Model Diagnostics
+library(car)
+vif(model2)
+vif(model3)
+vif(model4)
+vif(model5)
+
+###Logistic Regression of future movement
+model6 <- glm(fut_move ~ tie_index, 
+              family = "binomial")
+model7 <- glm(fut_move ~ tie_index + blackexc05 + blackexc05:tie_index,
+              family = "binomial")
+model8 <- glm(fut_move ~ tie_index + blackexc95 + blackexc95:tie_index,
+              family = "binomial")
+model9 <- glm(fut_move ~ tie_index + blackexc05 + male +
+                edu + metro + own + employ + moved_ever + blackexc05:tie_index,,
+              family = "binomial")
+model10 <- glm(fut_move ~ tie_index + blackexc95 + male +
+                 edu + metro + own + employ + moved_ever + blackexc95:tie_index,
+              family = "binomial")
+summary(model6)
+summary(model7)
+summary(model8)
+summary(model9)
+summary(model10)
+exp(coef(model6))
+exp(coef(model7))
+exp(coef(model8))
+exp(coef(model9))
+exp(coef(model10))
+
+install.packages("stargazer")
+library(stargazer)
+
+#Output regression results into word format
+stargazer(model1, model2, model3, model4, model5, 
+          title = "Logistic Regression Estimating Migration", 
+          type = "html", out = "RegressionMovement.doc")
+
+stargazer(model6, model7, model8, model9, model10,
+          title = "Logistic Regression Estimating Migration Inclination", 
+          type = "html", out = "RegressionFutureMove.doc")
+
+install.packages("table1")
+library(table1)
+label(move_prior2years) <- "Moved in 2 years"
+label(fut_move) <- "Plans to Move"
+label(tie_index) <- "Tie Index"
+label(blackexc05) <- "Black Bottom 5%"
+label(blackexc95) <- "Black Top 5%"
+label(male) <- "Male"
+label(edu) <- "Education (in Years)"
+label(metro) <- "Lives in Metropolitan Area"
+label(own) <- "Owns Residence"
+label(employ) <- "Employed"
+label(blackexc95:tie_index) <- "Top 5% X Tie Index"
+label(blackexc05:tie_index) <- "Bottom 5% X Tie Index"
+
+
+table1(~factor(move_prior2years) + factor(fut_move) + factor(male) + factor(white)
+               + edu + factor(metro) + factor(own) + factor(employ) | 
+         factor(tie_index), data=data,
+   caption = "Table 2. Distribution of Respondent Characteristics by Tie Index")
