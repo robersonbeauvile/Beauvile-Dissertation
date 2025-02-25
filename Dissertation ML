@@ -1,0 +1,484 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Nov 21 17:34:29 2024
+
+@author: rober
+"""
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, matthews_corrcoef, classification_report, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import learning_curve
+import pandas as pd
+import numpy as np
+from dbfread import DBF
+import matplotlib.pyplot as plt
+
+# Example: Load the DBF file
+dbf_file = DBF(r"C:\Users\rober\OneDrive\Papers\Manuscripts\Strong Ties and Migration Inclination\Data\Network Lab\PSID_Data9.dbf")
+
+# Convert to a pandas DataFrame
+df = pd.DataFrame(iter(dbf_file))
+
+# Rename Columns
+df.columns = ['release_number1',
+              'interview_number1', 
+              'person_number', 
+              'male',
+              'release_number2',
+              'own',
+              'latino',
+              'white',
+              'metro',
+              'interview_number2',
+              'sequence_number1',
+              'relation',
+              'age',
+              'employment',
+              'release_number3',
+              'good_friend',
+              'satisfied_f',
+              'help_friend',
+              'in_person',
+              'phone_talk',
+              'text_email',
+              'time_f',
+              'more_f',
+              'release_number4', 
+              'moved',
+              'year_moved',
+              'why_moved',
+              'move_next_year',
+              'lived_outstate',
+              'family_income',
+              'interview_number3',
+              'sequence_number2',
+              'relation2',
+              'years_education']
+
+print("\nDataFrame with New Column Names:")
+print(df)
+
+# Display the first few rows
+print(df.head())
+
+print(df.dtypes)
+
+# Dropping the useless columns
+df.drop(columns=['release_number1',
+                 'interview_number1',
+                 'person_number',
+                 'release_number2',
+                 'interview_number2',
+                 'sequence_number1',
+                 'release_number3',
+                 'release_number4',
+                 'interview_number3',
+                 'sequence_number2',
+                 'relation2',
+                 'relation'], inplace=True)
+
+# Check for missing values
+print(df.isnull().sum())
+
+# Recoding and cleaning data
+df['tie_index'] = df['help_friend'] + df['in_person'] + df['phone_talk'] + df['time_f'] + df['text_email']
+df.loc[df['family_income'] <= 1, 'family_income'] = np.nan
+df['income05'] = df['family_income'] 
+df['income95'] = df['family_income']
+df.loc[df['income05'] <= 9700, 'income05'] = 1 #Bottom 5 percentile
+df.loc[df['income05'] > 9700, 'income05'] = 0
+df.loc[df['income95'] < 212500, 'income95'] = 0
+df.loc[df['income95'] >= 212500, 'income95'] = 1 #Top 5 percentile
+df['log_income'] = np.log(df['family_income'])
+df['move_next_year'] = df['move_next_year'].replace({5:0,
+                                                    9:np.nan,
+                                                    8:np.nan})
+df['lived_outstate'] = df['lived_outstate'].replace({5:0,
+                                                   9:np.nan})
+df['good_friend'] = df['good_friend'].replace(9, np.nan)
+df['good_friend'] = 6 - df['good_friend']
+df.loc[df['satisfied_f'] > 5, 'satisfied_f'] = np.nan
+df['satisfied_f'] = 6 - df['satisfied_f']
+df['why_moved'] = df['why_moved'].replace({0:np.nan,
+                                           98:np.nan,
+                                           99:np.nan})
+df['more_f'] = df['more_f'].replace({2:0,
+                                     9:np.nan})
+conditions = [
+    ((df['year_moved'] == 2017) | (df['year_moved'] == 2016)),
+    (df['year_moved'] == 2015) | (df['year_moved'] == 0),
+    (df['year_moved'] == 9999)
+]
+
+categories = [1, 0, np.nan]
+
+df['moved_prior2years'] = np.select(conditions, categories, default=np.nan)
+df['moved_over3years'] = np.where(df['moved'] == 5, 0, np.where(df['moved'] > 5, np.nan, 1))
+df['years_education'] = df['years_education'].replace(99, np.nan)
+df['male'] = df['male'].replace({2:0,
+                                 9:np.nan})
+df['latino'] = df['latino'].replace({2:1,
+                                     3:1,
+                                     4:1,
+                                     5:1,
+                                     7:1,
+                                     9:np.nan,})
+df['own'] = df['own'].replace({5:0,
+                               8:np.nan})
+df['white'] = df['white'].replace({2:0,
+                                   3:0,
+                                   4:0,
+                                   5:0,
+                                   7:0,
+                                   9:np.nan})
+df['black'] = df['white'].replace({1:0,
+                                   2:1,
+                                   3:0,
+                                   4:0,
+                                   5:0,
+                                   7:0,
+                                   9:np.nan})
+df['employment'] = df['employment'].replace({9:np.nan,
+                                             0:np.nan})
+df['employment'] = df['employment'].replace({2:0,
+                                             3:0,
+                                             4:0,
+                                             5:0,
+                                             6:0,
+                                             7:0,
+                                             8:0})
+df['metro'] = df['metro'].replace({0:np.nan,
+                                   2:0})
+df['age'] = df['age'].replace({999:np.nan,
+                               0:np.nan})
+df['age2'] = df['age']*df['age']
+df['black_top5'] = df['black']*df['income95']
+df['black_bottom5'] = df['black']*df['income05']
+df['black_top5_tieS'] = df['black_top5']*df['tie_index']
+df['black_bottom5_tieS'] = df['black_bottom5']*df['tie_index']
+
+# Check for missing values
+print(df.isnull().sum())
+
+# Fill or drop missing values (example: fill with median)
+df = df.fillna(df.median())
+
+# Check for missing values
+print(df.isnull().sum())
+
+summary = df['why_moved'].value_counts(dropna=False)
+print(summary)
+
+'''Testing for multicollinearity'''
+# Compute the correlation matrix
+correlation_matrix = df.corr()
+
+# Print the correlation matrix (optional, for viewing)
+print(correlation_matrix)
+
+# Unstack the correlation matrix to get a series of pairs
+correlation_pairs = correlation_matrix.unstack()
+
+# Sort by absolute correlation values and exclude pairs with self-correlation
+sorted_pairs = correlation_pairs.abs().sort_values(ascending=False)
+
+# Exclude the pairs where the two features are the same (diagonal)
+sorted_pairs = sorted_pairs[sorted_pairs < 1]
+
+# Display highest correlated pairs
+print(sorted_pairs.head(50))
+
+'''Splitting data into training and testing sets'''
+# Set target column
+X = df.drop(columns=['moved_prior2years'])  
+y = df['moved_prior2years']
+
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+selected_features1 = ['male',
+                      'years_education',
+                      'metro',
+                      'age',
+                      'own',
+                      'moved',
+                      'white',
+                      'latino',
+                      'log_income',
+                      'tie_index',
+                      'satisfied_f',
+                      'good_friend'
+]
+
+X_train_subset1 = X_train[selected_features1]
+X_test_subset1 = X_test[selected_features1]
+
+'''Testing for class imbalance'''
+# Assuming your target variable is 'y'
+y_train.value_counts()  # Returns the count of each class in the target variable
+y_test.value_counts()  # Returns the count of each class in the target variable
+
+
+'''Logistic Regression Algorithm and Performance Metrics'''
+# Initialize the model
+log_reg = LogisticRegression(random_state=42)
+
+# Train the model
+log_reg.fit(X_train_subset1, y_train)
+
+# Predict on the test set
+y_pred = log_reg.predict(X_test_subset1)
+
+# Accuracy score
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy: {accuracy:.2f}")
+
+# Confusion matrix
+conf_matrix = confusion_matrix(y_test, y_pred)
+print("Confusion Matrix:")
+print(conf_matrix)
+
+'''Print Classification report'''
+# Classification report
+class_report = classification_report(y_test, y_pred, output_dict=True)
+
+# Convert the dictionary to a DataFrame
+report_df = pd.DataFrame(class_report).transpose()
+
+# Plot the DataFrame as a table
+fig, ax = plt.subplots(figsize=(8, 4))  # Set the figure size
+ax.axis('tight')
+ax.axis('off')
+table = ax.table(cellText=report_df.round(2).values,  # Round values for better display
+                 colLabels=report_df.columns,
+                 rowLabels=report_df.index,
+                 loc='center',
+                 cellLoc='center')
+
+# Style the table
+table.auto_set_font_size(False)
+table.set_fontsize(10)
+table.auto_set_column_width(col=list(range(len(report_df.columns))))
+
+# Show the plot
+plt.title("Classification Report")
+plt.show()
+
+# Evaluate the model
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy: {accuracy}")
+
+# Precision Score
+precision = precision_score(y_test, y_pred)
+print(f"Precision: {precision}")
+
+# Recall Score
+recall = recall_score(y_test, y_pred)
+print(f"Recall: {recall}")
+
+# F1 Score
+f1 = f1_score(y_test, y_pred)
+print(f"F1 Score: {f1}")
+
+# Confusion Matrix
+conf_matrix = confusion_matrix(y_test, y_pred)
+print(f"Confusion Matrix:\n{conf_matrix}")
+
+# Compute ROC-AUC score
+roc_auc = roc_auc_score(y_test, y_pred)
+print(f"ROC-AUC Score: {roc_auc:.2f}")
+
+# Calculate the MCC score
+mcc = matthews_corrcoef(y_test, y_pred)
+print(f"Matthews Correlation Coefficient (MCC): {mcc}")
+
+
+#Overfitting Tests and Feature Importance Logsitic Regression 
+# Testing for Overfitting
+# Training accuracy
+train_accuracy = log_reg.score(X_train_subset1, y_train)
+
+# Testing accuracy
+test_accuracy = log_reg.score(X_test_subset1, y_test)
+
+print(f"Training Accuracy: {train_accuracy:.2f}")
+print(f"Testing Accuracy: {test_accuracy:.2f}")
+
+
+# Perform K-fold cross-validation (e.g., 5-fold)
+cv_scores = cross_val_score(log_reg, X, y, cv=5)
+
+print(f"Cross-validation scores: {cv_scores}")
+print(f"Average CV score: {cv_scores.mean()}")
+print(f"CV score standard deviation: {cv_scores.std()}")
+
+# Get learning curve data
+train_sizes, train_scores, validation_scores = learning_curve(
+    log_reg, X, y, cv=5, scoring='accuracy', n_jobs=-1, train_sizes=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+
+# Plot learning curves
+plt.plot(train_sizes, train_scores.mean(axis=1), label="Training score")
+plt.plot(train_sizes, validation_scores.mean(axis=1), label="Validation score")
+plt.xlabel("Training Set Size")
+plt.ylabel("Accuracy")
+plt.legend()
+plt.show()
+
+# Get coefficients
+coefficients = log_reg.coef_[0]  # For binary classification, there is one set of coefficients
+
+# Pair feature names with their coefficients
+feature_importance = pd.DataFrame({
+    'Feature': X_train_subset1.columns,
+    'Importance': coefficients
+})
+
+print(feature_importance)
+
+# Sort by importance
+feature_importance = feature_importance.sort_values(by='Importance', key=abs, ascending=False)
+
+# Plot
+plt.figure(figsize=(10, 6))
+plt.barh(feature_importance['Feature'], feature_importance['Importance'], color='skyblue')
+plt.xlabel('Coefficient Value (Importance)')
+plt.title('Feature Importance in Logistic Regression')
+plt.gca().invert_yaxis()
+plt.show()
+
+
+
+'''Random Forest Algorithm and Performance Metrics'''
+# Initialize the Random Forest model
+rf_classifier = RandomForestClassifier(bootstrap=True, random_state=42)
+
+# Train the model
+rf_classifier.fit(X_train_subset1, y_train)
+
+# Make predictions
+y_pred = rf_classifier.predict(X_test_subset1)
+
+# Accuracy score
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy: {accuracy:.2f}")
+
+# Confusion matrix
+conf_matrix = confusion_matrix(y_test, y_pred)
+print("Confusion Matrix:")
+print(conf_matrix)
+
+#Print Classification report
+# Classification report
+class_report = classification_report(y_test, y_pred, output_dict=True)
+
+# Convert the dictionary to a DataFrame
+report_df = pd.DataFrame(class_report).transpose()
+
+# Plot the DataFrame as a table
+fig, ax = plt.subplots(figsize=(8, 4))  # Set the figure size
+ax.axis('tight')
+ax.axis('off')
+table = ax.table(cellText=report_df.round(2).values,  # Round values for better display
+                 colLabels=report_df.columns,
+                 rowLabels=report_df.index,
+                 loc='center',
+                 cellLoc='center')
+
+# Style the table
+table.auto_set_font_size(False)
+table.set_fontsize(10)
+table.auto_set_column_width(col=list(range(len(report_df.columns))))
+
+# Show the plot
+plt.title("Classification Report")
+plt.show()
+
+# Evaluate the model
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy: {accuracy}")
+
+# Precision Score
+precision = precision_score(y_test, y_pred)
+print(f"Precision: {precision}")
+
+# Recall Score
+recall = recall_score(y_test, y_pred)
+print(f"Recall: {recall}")
+
+# F1 Score
+f1 = f1_score(y_test, y_pred)
+print(f"F1 Score: {f1}")
+
+# Confusion Matrix
+conf_matrix = confusion_matrix(y_test, y_pred)
+print(f"Confusion Matrix:\n{conf_matrix}")
+
+# Compute ROC-AUC score
+roc_auc = roc_auc_score(y_test, y_pred)
+print(f"ROC-AUC Score: {roc_auc:.2f}")
+
+# Calculate the MCC score
+mcc = matthews_corrcoef(y_test, y_pred)
+print(f"Matthews Correlation Coefficient (MCC): {mcc}")
+
+
+
+#Overfitting Test and Feature Importance Random Forest 
+# ROC-AUC Score
+roc_auc = roc_auc_score(y_test, rf_classifier.predict_proba(X_test_subset1)[:, 1])
+print(f"ROC-AUC Score: {roc_auc}")
+
+
+# Testing for Overfitting
+# Evaluate on training set
+train_accuracy = accuracy_score(y_train, rf_classifier.predict(X_train_subset1))
+
+# Evaluate on test set
+test_accuracy = accuracy_score(y_test, rf_classifier.predict(X_test_subset1))
+
+print(f"Training Accuracy: {train_accuracy}")
+print(f"Test Accuracy: {test_accuracy}")
+
+# Perform K-fold cross-validation (e.g., 5-fold)
+cv_scores = cross_val_score(rf_classifier, X, y, cv=5)
+
+print(f"Cross-validation scores: {cv_scores}")
+print(f"Average CV score: {cv_scores.mean()}")
+print(f"CV score standard deviation: {cv_scores.std()}")
+
+# Get learning curve data
+train_sizes, train_scores, validation_scores = learning_curve(
+    rf_classifier, X, y, cv=5, scoring='accuracy', n_jobs=-1, train_sizes=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+
+# Plot learning curves
+plt.plot(train_sizes, train_scores.mean(axis=1), label="Training score")
+plt.plot(train_sizes, validation_scores.mean(axis=1), label="Validation score")
+plt.xlabel("Training Set Size")
+plt.ylabel("Accuracy")
+plt.legend()
+plt.show()
+
+
+# Get feature importance scores
+feature_importances = rf_classifier.feature_importances_
+
+# Display feature importances with feature names
+feature_importance_df = pd.DataFrame({
+    'Feature': X_train_subset1.columns,
+    'Importance': feature_importances
+}).sort_values(by='Importance', ascending=False)
+
+print(feature_importance_df)
+
+# Plot feature importances
+plt.figure(figsize=(10, 6))
+plt.bar(feature_importance_df['Feature'], feature_importance_df['Importance'], color='skyblue')
+plt.title('Feature Importance')
+plt.ylabel('Importance Score')
+plt.xlabel('Features')
+plt.xticks(rotation=45)
+plt.show()
+
